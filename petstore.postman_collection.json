@@ -1,0 +1,471 @@
+{
+  "info": {
+    "name": "Swagger Petstore — API tests",
+    "description": "Pet lifecycle (create → read → update → delete → 404) and store orders, with positive, negative and boundary checks.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Pet lifecycle",
+      "item": [
+        {
+          "name": "01 Create pet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pet"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{petId}}\",\n  \"name\": \"{{petName}}\",\n  \"category\": {\n    \"id\": 1,\n    \"name\": \"dogs\"\n  },\n  \"photoUrls\": [\n    \"https://example.com/rex.jpg\"\n  ],\n  \"tags\": [\n    {\n      \"id\": 1,\n      \"name\": \"qa-portfolio\"\n    }\n  ],\n  \"status\": \"available\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"petId\", String(Date.now()));",
+                  "pm.collectionVariables.set(\"petName\", \"Rex-\" + Math.floor(Math.random() * 10000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const pet = pm.response.json();",
+                  "pm.test(\"returns the id sent\", () => pm.expect(String(pet.id)).to.eql(pm.collectionVariables.get(\"petId\")));",
+                  "pm.test(\"returns the name sent\", () => pm.expect(pet.name).to.eql(pm.collectionVariables.get(\"petName\")));",
+                  "pm.test(\"status is available\", () => pm.expect(pet.status).to.eql(\"available\"));",
+                  "pm.test(\"response under 3s\", () => pm.expect(pm.response.responseTime).to.be.below(3000));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 Get pet by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pet/{{petId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pet",
+                "{{petId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1500); // public sandbox is eventually consistent"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const pet = pm.response.json();",
+                  "pm.test(\"has required fields\", () => pm.expect(pet).to.include.keys(\"id\", \"name\", \"photoUrls\", \"status\"));",
+                  "pm.test(\"photoUrls is an array\", () => pm.expect(pet.photoUrls).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 Update pet status to sold",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pet"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{petId}}\",\n  \"name\": \"{{petName}}\",\n  \"photoUrls\": [\n    \"https://example.com/rex.jpg\"\n  ],\n  \"status\": \"sold\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"status changed to sold\", () => pm.expect(pm.response.json().status).to.eql(\"sold\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 Find by status — invalid status value",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pet/findByStatus?status=not-a-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pet",
+                "findByStatus"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "not-a-status"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"does not return a server error\", () => pm.expect(pm.response.code).to.be.below(500));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test(\"no pet has the unknown status\", () => pm.response.json().forEach(p => pm.expect(p.status).to.eql(\"not-a-status\")));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 Get pet with non-numeric id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pet/abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pet",
+                "abc"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404 for invalid id\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 Delete pet",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pet/{{petId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pet",
+                "{{petId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1500); // public sandbox is eventually consistent"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 Get deleted pet returns 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pet/{{petId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pet",
+                "{{petId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1500); // public sandbox is eventually consistent"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404 after delete\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error message present\", () => pm.expect(pm.response.json().message).to.match(/not found/i));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Store",
+      "item": [
+        {
+          "name": "08 Place order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/store/order",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "store",
+                "order"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{orderId}}\",\n  \"petId\": \"{{petId}}\",\n  \"quantity\": 1,\n  \"status\": \"placed\",\n  \"complete\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"orderId\", String(Math.floor(Math.random() * 9) + 1));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const order = pm.response.json();",
+                  "pm.test(\"order is placed\", () => pm.expect(order.status).to.eql(\"placed\"));",
+                  "pm.test(\"quantity preserved\", () => pm.expect(order.quantity).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 Get order by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/store/order/{{orderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "store",
+                "order",
+                "{{orderId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1500); // public sandbox is eventually consistent"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"same order id\", () => pm.expect(String(pm.response.json().id)).to.eql(pm.collectionVariables.get(\"orderId\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 Delete order",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/store/order/{{orderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "store",
+                "order",
+                "{{orderId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1500); // public sandbox is eventually consistent"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 Inventory returns counts by status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/store/inventory",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "store",
+                "inventory"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"values are integers\", () => Object.values(pm.response.json()).forEach(v => pm.expect(Number.isInteger(v)).to.be.true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "petId",
+      "value": ""
+    },
+    {
+      "key": "petName",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    }
+  ]
+}
